@@ -1,1 +1,0 @@
-import{a as t}from"./index-Za-SNQ1z.js";const e=async()=>(await t.get("/map/segments")).data,n=async()=>(await t.get("/map/vehicles")).data,r=async()=>(await t.get("/map/incidents")).data,c=async()=>(await t.get("/map/districts")).data,i=async()=>(await t.get("/map/locations")).data;export{n as a,r as b,c,i as d,e as g};

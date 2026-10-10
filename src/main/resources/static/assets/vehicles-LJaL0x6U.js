@@ -1,1 +1,0 @@
-import{a as s}from"./index-Za-SNQ1z.js";const c=async e=>(await s.get("/vehicles",{params:e})).data,i=async e=>(await s.post("/vehicles",e)).data,r=async e=>{await s.delete(`/vehicles/${e}`)},n=async e=>(await s.get(`/vehicles/${e}/trail`)).data,o=async e=>{await s.post("/vehicles/me/position",e)};export{c as a,i as c,r as d,n as g,o as p};

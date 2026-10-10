@@ -1,1 +1,0 @@
-import{a as e}from"./index-Za-SNQ1z.js";const r=async t=>(await e.get("/incidents",{params:t})).data,c=async t=>(await e.post("/incidents",t)).data,i=async(t,s)=>(await e.post(`/incidents/${t}/resolve`,{note:s})).data,o=async t=>(await e.get(`/incidents/${t}/events`)).data,d=async t=>(await e.get("/incidents/history",{params:t})).data;export{r as a,d as b,c,o as g,i as r};
