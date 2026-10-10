@@ -1,5 +1,6 @@
 package com.nerlogix;
 
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -11,11 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TidbConnectivityTest {
 
     @Test
-    void testTiDbConnectionIfCredentialsProvided() {
-        String url = System.getenv("SPRING_DATASOURCE_URL");
-        if (url == null || url.isBlank()) {
-            url = "jdbc:mysql://gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000/sys?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3";
-        }
+    void testTiDbConnectionAndFlywayMigration() {
+        String baseUrl = "jdbc:mysql://gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000/?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3";
         String username = System.getenv("SPRING_DATASOURCE_USERNAME");
         if (username == null || username.isBlank()) {
             username = "2LGgC98nsjSZmT8.root";
@@ -25,22 +23,33 @@ class TidbConnectivityTest {
             password = "etiD3bLMPowSlFH2";
         }
 
-        try (Connection conn = DriverManager.getConnection(url, username, password);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT VERSION()")) {
+        System.out.println("Testing database creation in TiDB Cloud...");
+        try (Connection conn = DriverManager.getConnection(baseUrl, username, password);
+             Statement stmt = conn.createStatement()) {
 
-            assertThat(conn.isValid(5)).isTrue();
-            if (rs.next()) {
-                String version = rs.getString(1);
-                System.out.println("Connected to TiDB Cloud successfully! Version: " + version);
-                assertThat(version).isNotNull();
-            }
+            stmt.execute("CREATE DATABASE IF NOT EXISTS nerlogix");
+            System.out.println("Database nerlogix created or already exists!");
         } catch (Exception e) {
-            System.err.println("TiDB Cloud connection failed: " + e.getMessage());
-            // If offline/network restricted, don't fail standard build unless SPRING_PROFILES_ACTIVE=prod
-            if ("prod".equalsIgnoreCase(System.getenv("SPRING_PROFILES_ACTIVE"))) {
-                throw new RuntimeException("Failed to connect to TiDB Cloud in production profile", e);
-            }
+            System.err.println("Database creation failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        String targetUrl = "jdbc:mysql://gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000/nerlogix?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3";
+
+        System.out.println("Testing Flyway migration in schema nerlogix against TiDB Cloud...");
+        try {
+            Flyway flyway = Flyway.configure()
+                    .dataSource(targetUrl, username, password)
+                    .baselineOnMigrate(true)
+                    .locations("classpath:db/migration")
+                    .load();
+
+            flyway.migrate();
+            System.out.println("Flyway migration in nerlogix schema completed successfully!");
+        } catch (Exception e) {
+            System.err.println("Flyway migration failed: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
         }
     }
 }
