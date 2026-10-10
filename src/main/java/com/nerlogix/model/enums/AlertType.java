@@ -1,0 +1,5 @@
+package com.nerlogix.model.enums;
+
+public enum AlertType {
+    ROAD_BLOCKED, DISTRICT_INACCESSIBLE, DELIVERY_DELAYED, HIGH_RISK_CORRIDOR, INCIDENT, EMERGENCY
+}

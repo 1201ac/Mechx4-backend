@@ -1,0 +1,255 @@
+CREATE TABLE users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    language VARCHAR(10) DEFAULT 'en',
+    alert_preferences TEXT,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE refresh_tokens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE districts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    state VARCHAR(100) NOT NULL,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    population_band VARCHAR(50) NOT NULL,
+    connectivity_score DOUBLE PRECISION DEFAULT 100.0,
+    status VARCHAR(50) DEFAULT 'GOOD',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE road_nodes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    district_id BIGINT NOT NULL REFERENCES districts(id),
+    kind VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE road_segments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    from_node BIGINT NOT NULL REFERENCES road_nodes(id),
+    to_node BIGINT NOT NULL REFERENCES road_nodes(id),
+    name VARCHAR(150) NOT NULL,
+    highway_code VARCHAR(50),
+    asset_type VARCHAR(50) NOT NULL,
+    length_km DOUBLE PRECISION NOT NULL,
+    base_speed_kmph DOUBLE PRECISION NOT NULL,
+    terrain_class INT NOT NULL,
+    landslide_prone BOOLEAN DEFAULT FALSE,
+    flood_prone BOOLEAN DEFAULT FALSE,
+    status VARCHAR(50) NOT NULL DEFAULT 'OPEN',
+    risk_score DOUBLE PRECISION DEFAULT 0.0,
+    risk_factors TEXT,
+    status_reason TEXT,
+    polyline TEXT,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE road_status_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    segment_id BIGINT NOT NULL REFERENCES road_segments(id) ON DELETE CASCADE,
+    old_status VARCHAR(50),
+    new_status VARCHAR(50) NOT NULL,
+    reason TEXT,
+    changed_by BIGINT REFERENCES users(id),
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE weather_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    district_id BIGINT NOT NULL REFERENCES districts(id),
+    condition VARCHAR(50) NOT NULL,
+    rain_mm DOUBLE PRECISION DEFAULT 0.0,
+    note TEXT,
+    source VARCHAR(50) NOT NULL,
+    logged_by BIGINT REFERENCES users(id),
+    logged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE vehicles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    reg_no VARCHAR(50) NOT NULL UNIQUE,
+    type VARCHAR(50) NOT NULL,
+    capacity_kg DOUBLE PRECISION NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'IDLE',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    heading DOUBLE PRECISION DEFAULT 0.0,
+    speed_kmph DOUBLE PRECISION DEFAULT 0.0,
+    last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE vehicle_positions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    vehicle_id BIGINT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    speed_kmph DOUBLE PRECISION DEFAULT 0.0,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE shipments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    cargo_category VARCHAR(50) NOT NULL,
+    cargo_description TEXT,
+    weight_kg DOUBLE PRECISION NOT NULL,
+    priority VARCHAR(50) NOT NULL DEFAULT 'NORMAL',
+    origin_node BIGINT NOT NULL REFERENCES road_nodes(id),
+    destination_node BIGINT NOT NULL REFERENCES road_nodes(id),
+    vehicle_id BIGINT REFERENCES vehicles(id),
+    driver_user_id BIGINT REFERENCES users(id),
+    status VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
+    planned_eta TIMESTAMP,
+    current_eta TIMESTAMP,
+    progress_pct DOUBLE PRECISION DEFAULT 0.0,
+    delay_min INT DEFAULT 0,
+    started_at TIMESTAMP,
+    delivered_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE route_plans (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    shipment_id BIGINT NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+    segment_ids TEXT,
+    geometry TEXT,
+    distance_km DOUBLE PRECISION NOT NULL,
+    eta_min DOUBLE PRECISION NOT NULL,
+    risk_score DOUBLE PRECISION DEFAULT 0.0,
+    status VARCHAR(50) NOT NULL DEFAULT 'PROPOSED',
+    reason TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE incidents (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(50) NOT NULL,
+    severity INT NOT NULL,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    segment_id BIGINT REFERENCES road_segments(id),
+    district_id BIGINT REFERENCES districts(id),
+    description TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'REPORTED',
+    source VARCHAR(50) NOT NULL,
+    report_id BIGINT,
+    created_by BIGINT REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP
+);
+
+CREATE TABLE incident_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    incident_id BIGINT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    action VARCHAR(50) NOT NULL,
+    by_user BIGINT REFERENCES users(id),
+    note TEXT,
+    at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE field_reports (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    client_id VARCHAR(100) NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    accuracy DOUBLE PRECISION,
+    captured_at TIMESTAMP NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    severity INT NOT NULL,
+    note TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    moderator_note TEXT,
+    incident_id BIGINT REFERENCES incidents(id),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE report_images (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    field_report_id BIGINT NOT NULL REFERENCES field_reports(id) ON DELETE CASCADE,
+    file_path VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE alerts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(50) NOT NULL,
+    severity VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id BIGINT,
+    open_key VARCHAR(255) UNIQUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'OPEN',
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP
+);
+
+CREATE TABLE notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    alert_id BIGINT REFERENCES alerts(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    read_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE district_stock (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    district_id BIGINT NOT NULL REFERENCES districts(id) ON DELETE CASCADE,
+    category VARCHAR(50) NOT NULL,
+    stock_units DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    daily_demand_units DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_district_stock UNIQUE (district_id, category)
+);
+
+CREATE TABLE rule_config (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    config_key VARCHAR(100) NOT NULL UNIQUE,
+    config_value VARCHAR(255) NOT NULL,
+    description TEXT
+);
+
+CREATE TABLE api_keys (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    key_hash VARCHAR(255) NOT NULL UNIQUE,
+    active BOOLEAN DEFAULT TRUE,
+    created_by BIGINT REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TIMESTAMP
+);
+
+CREATE TABLE audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id),
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id BIGINT,
+    details TEXT,
+    ip_address VARCHAR(50),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE settings (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(100) NOT NULL UNIQUE,
+    setting_value VARCHAR(255) NOT NULL
+);
