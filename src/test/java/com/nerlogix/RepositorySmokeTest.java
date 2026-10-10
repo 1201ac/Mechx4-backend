@@ -1,5 +1,7 @@
 package com.nerlogix;
 
+import com.nerlogix.entity.Vehicle;
+import com.nerlogix.entity.VehiclePosition;
 import com.nerlogix.repository.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,5 +61,20 @@ class RepositorySmokeTest {
         assertThat(apiKeyRepository.count()).isGreaterThanOrEqualTo(0);
         assertThat(auditLogRepository.count()).isGreaterThanOrEqualTo(0);
         assertThat(settingRepository.count()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void testVehiclePositionSaveAndReadHeading() {
+        Vehicle vehicle = vehicleRepository.findAll().stream().findFirst().orElse(null);
+        if (vehicle != null) {
+            VehiclePosition pos = new VehiclePosition(vehicle, 26.1433, 91.7362, 45.5, 60.0);
+            VehiclePosition saved = vehiclePositionRepository.save(pos);
+            assertThat(saved.getId()).isNotNull();
+            assertThat(saved.getHeading()).isEqualTo(45.5);
+
+            VehiclePosition fetched = vehiclePositionRepository.findById(saved.getId()).orElse(null);
+            assertThat(fetched).isNotNull();
+            assertThat(fetched.getHeading()).isEqualTo(45.5);
+        }
     }
 }

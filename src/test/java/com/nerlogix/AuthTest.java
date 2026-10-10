@@ -41,6 +41,14 @@ class AuthTest {
                     .andExpect(jsonPath("$.accessToken").isNotEmpty())
                     .andExpect(jsonPath("$.refreshToken").isNotEmpty())
                     .andExpect(jsonPath("$.user.email").value(email));
+
+            mockMvc.perform(post("/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                    .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                    .andExpect(jsonPath("$.user.email").value(email));
         }
     }
 
