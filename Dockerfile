@@ -14,6 +14,7 @@ FROM eclipse-temurin:21-jre-alpine
 RUN addgroup -S nerlogix && adduser -S nerlogix -G nerlogix
 WORKDIR /app
 EXPOSE 8080
+ENV SPRING_PROFILES_ACTIVE=prod
 COPY --from=builder /app/target/nerlogix.jar app.jar
 RUN chown -R nerlogix:nerlogix /app
 USER nerlogix
