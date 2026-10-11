@@ -10,4 +10,5 @@ import java.util.Optional;
 public interface VehicleRepository extends JpaRepository<Vehicle, Long>, JpaSpecificationExecutor<Vehicle> {
     Optional<Vehicle> findByRegNo(String regNo);
     List<Vehicle> findByStatus(VehicleStatus status);
+    List<Vehicle> findByOwnerUserId(Long ownerUserId);
 }

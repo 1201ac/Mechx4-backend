@@ -262,6 +262,11 @@ public class SeedService implements CommandLineRunner {
             RoadNode startNode = nodeMap.get("Guwahati");
             Vehicle v = new Vehicle("AS-01-C-" + (1000 + i), vTypes[i % vTypes.length], 2000.0 + i * 500.0, startNode.getLat(), startNode.getLng());
             v.setSpeedKmph(45.0);
+            if (i <= 3) {
+                v.setOwnerUser(mainUser);
+            } else if (i <= 10) {
+                v.setOwnerUser(extraUsers.get((i - 4) % extraUsers.size()));
+            }
             vehicles.add(vehicleRepository.save(v));
         }
 

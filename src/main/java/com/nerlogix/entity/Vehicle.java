@@ -44,6 +44,13 @@ public class Vehicle {
     @Column(name = "last_driver_fix_at")
     private LocalDateTime lastDriverFixAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_user_id")
+    private User ownerUser;
+
+    public User getOwnerUser() { return ownerUser; }
+    public void setOwnerUser(User ownerUser) { this.ownerUser = ownerUser; }
+
     public Vehicle() {}
 
     public Vehicle(String regNo, VehicleType type, Double capacityKg, Double lat, Double lng) {

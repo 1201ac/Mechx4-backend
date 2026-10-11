@@ -15,9 +15,14 @@ public record VehicleDto(
     Double lng,
     Double heading,
     Double speedKmph,
-    LocalDateTime lastSeen
+    LocalDateTime lastSeen,
+    Long ownerUserId,
+    String ownerName
 ) {
     public static VehicleDto fromEntity(Vehicle v) {
+        Long ownerId = v.getOwnerUser() != null ? v.getOwnerUser().getId() : null;
+        String ownerName = v.getOwnerUser() != null ? v.getOwnerUser().getName() : null;
+
         return new VehicleDto(
             v.getId(),
             v.getRegNo(),
@@ -28,7 +33,9 @@ public record VehicleDto(
             v.getLng(),
             v.getHeading(),
             v.getSpeedKmph(),
-            v.getLastSeen()
+            v.getLastSeen(),
+            ownerId,
+            ownerName
         );
     }
 }
