@@ -184,31 +184,45 @@ public class ShipmentService {
         Shipment s = shipmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment not found: " + id));
 
-        if (s.getStatus() != ShipmentStatus.DRAFT && s.getStatus() != ShipmentStatus.ASSIGNED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot assign shipment in status: " + s.getStatus());
+        if (s.getStatus() == ShipmentStatus.IN_TRANSIT || s.getStatus() == ShipmentStatus.DELIVERED || s.getStatus() == ShipmentStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot assign shipment in status: " + s.getStatus());
         }
 
         Vehicle v = vehicleRepository.findById(req.vehicleId())
                 .orElseThrow(() -> new ResourceNotFoundException("Vehicle not found: " + req.vehicleId()));
 
-        List<Shipment> activeVehicleShipments = shipmentRepository.findByVehicleIdAndStatusIn(
-                v.getId(), List.of(ShipmentStatus.ASSIGNED, ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELAYED));
-        for (Shipment active : activeVehicleShipments) {
-            if (!active.getId().equals(s.getId())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Vehicle " + v.getRegNo() + " is already assigned to active shipment " + active.getCode());
-            }
+        if (v.getStatus() != VehicleStatus.IDLE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Vehicle " + v.getRegNo() + " is currently not idle: " + v.getStatus());
         }
 
-        User driver = userRepository.findById(req.driverUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("Driver user not found: " + req.driverUserId()));
+        double payloadWeight = s.getWeightKg() != null ? s.getWeightKg() : 0.0;
+        if (v.getCapacityKg() < payloadWeight) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehicle capacity (" + v.getCapacityKg() + " kg) is less than shipment weight (" + payloadWeight + " kg)");
+        }
+
+        final Long effectiveDriverId;
+        if (req.driverUserId() != null) {
+            effectiveDriverId = req.driverUserId();
+        } else if (v.getOwnerUser() != null) {
+            effectiveDriverId = v.getOwnerUser().getId();
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fleet vehicle with no owner requires an explicit driver selection");
+        }
+
+        User driver = userRepository.findById(effectiveDriverId)
+                .orElseThrow(() -> new ResourceNotFoundException("Driver user not found: " + effectiveDriverId));
         if (!Boolean.TRUE.equals(driver.getActive())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver user is deactivated: " + driver.getEmail());
         }
 
-        Optional<Shipment> activeDriverShipment = shipmentRepository.findByDriverUserIdAndStatusIn(
-                driver.getId(), List.of(ShipmentStatus.ASSIGNED, ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELAYED));
+        if (v.getOwnerUser() != null && !v.getOwnerUser().getId().equals(driver.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Vehicle " + v.getRegNo() + " belongs to user " + v.getOwnerUser().getEmail() + ", cannot assign to driver " + driver.getEmail());
+        }
+
+        Optional<Shipment> activeDriverShipment = shipmentRepository.findFirstByDriverUserIdAndStatusIn(
+                driver.getId(), List.of(ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELAYED));
         if (activeDriverShipment.isPresent() && !activeDriverShipment.get().getId().equals(s.getId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Driver " + driver.getEmail() + " is already assigned to active shipment " + activeDriverShipment.get().getCode());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Driver " + driver.getEmail() + " is already assigned to active in-transit shipment: " + activeDriverShipment.get().getCode());
         }
 
         s.setVehicle(v);
@@ -223,38 +237,41 @@ public class ShipmentService {
                 s.getPriority()
         ));
 
-        if (routeOptions.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "No safe route path available for origin and destination");
+        if (!routeOptions.isEmpty()) {
+            RouteOptionDto bestOption = routeOptions.get(0);
+
+            List<RoutePlan> activePlans = routePlanRepository.findByShipmentIdAndStatus(s.getId(), RoutePlanStatus.ACTIVE);
+            for (RoutePlan oldPlan : activePlans) {
+                oldPlan.setStatus(RoutePlanStatus.SUPERSEDED);
+                routePlanRepository.save(oldPlan);
+            }
+
+            RoutePlan plan = new RoutePlan();
+            plan.setShipment(s);
+            try {
+                plan.setSegmentIds(objectMapper.writeValueAsString(bestOption.segmentIds()));
+            } catch (Exception e) {
+                plan.setSegmentIds("[]");
+            }
+            plan.setGeometry(bestOption.geometry());
+            plan.setDistanceKm(bestOption.distanceKm());
+            plan.setEtaMin((double) bestOption.etaMinutes());
+            plan.setRiskScore(bestOption.riskScore());
+            plan.setStatus(RoutePlanStatus.ACTIVE);
+            plan.setReason(bestOption.reason());
+            routePlanRepository.save(plan);
+
+            s.setPlannedEta(LocalDateTime.now().plusMinutes(bestOption.etaMinutes()));
+            s.setCurrentEta(s.getPlannedEta());
         }
-
-        RouteOptionDto bestOption = routeOptions.get(0);
-
-        List<RoutePlan> activePlans = routePlanRepository.findByShipmentIdAndStatus(s.getId(), RoutePlanStatus.ACTIVE);
-        for (RoutePlan oldPlan : activePlans) {
-            oldPlan.setStatus(RoutePlanStatus.SUPERSEDED);
-            routePlanRepository.save(oldPlan);
-        }
-
-        RoutePlan plan = new RoutePlan();
-        plan.setShipment(s);
-        try {
-            plan.setSegmentIds(objectMapper.writeValueAsString(bestOption.segmentIds()));
-        } catch (Exception e) {
-            plan.setSegmentIds("[]");
-        }
-        plan.setGeometry(bestOption.geometry());
-        plan.setDistanceKm(bestOption.distanceKm());
-        plan.setEtaMin((double) bestOption.etaMinutes());
-        plan.setRiskScore(bestOption.riskScore());
-        plan.setStatus(RoutePlanStatus.ACTIVE);
-        plan.setReason(bestOption.reason());
-        routePlanRepository.save(plan);
-
-        s.setPlannedEta(LocalDateTime.now().plusMinutes(bestOption.etaMinutes()));
-        s.setCurrentEta(s.getPlannedEta());
 
         s = shipmentRepository.save(s);
-        auditLogService.recordAudit(currentUser, "SHIPMENT_ASSIGNED", "SHIPMENT", s.getId(), "Assigned shipment " + s.getCode() + " to vehicle " + v.getRegNo(), "127.0.0.1");
+        auditLogService.recordAudit(currentUser, "SHIPMENT_ASSIGNED", "SHIPMENT", s.getId(),
+                "Assigned shipment " + s.getCode() + " to driver " + driver.getEmail() + " and vehicle " + v.getRegNo(), "127.0.0.1");
+        sseService.sendToUser(driver.getId(), "alert.created", Map.of(
+                "message", "You have been assigned shipment " + s.getCode() + " with vehicle " + v.getRegNo(),
+                "title", "New Shipment Assignment: " + s.getCode()
+        ));
         sseService.broadcast("shipment.updated", Map.of("id", s.getId(), "status", s.getStatus()));
         return ShipmentDto.fromEntity(s);
     }

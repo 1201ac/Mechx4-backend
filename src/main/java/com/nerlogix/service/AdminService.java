@@ -37,6 +37,7 @@ public class AdminService {
     private final RoadSegmentRepository roadSegmentRepository;
 
     private final DistrictRepository districtRepository;
+    private final VehicleRepository vehicleRepository;
 
     public AdminService(
             UserRepository userRepository,
@@ -50,7 +51,8 @@ public class AdminService {
             AuditLogService auditLogService,
             RiskEngine riskEngine,
             RoadSegmentRepository roadSegmentRepository,
-            DistrictRepository districtRepository) {
+            DistrictRepository districtRepository,
+            VehicleRepository vehicleRepository) {
         this.userRepository = userRepository;
         this.auditLogRepository = auditLogRepository;
         this.ruleConfigRepository = ruleConfigRepository;
@@ -63,12 +65,32 @@ public class AdminService {
         this.riskEngine = riskEngine;
         this.roadSegmentRepository = roadSegmentRepository;
         this.districtRepository = districtRepository;
+        this.vehicleRepository = vehicleRepository;
     }
 
     @Transactional(readOnly = true)
     public Page<UserDto> getUsers(Pageable pageable) {
         Page<User> page = userRepository.findAll(pageable);
-        List<UserDto> dtos = page.getContent().stream().map(UserDto::fromEntity).toList();
+        List<User> userList = page.getContent();
+        if (userList.isEmpty()) {
+            return new PageImpl<>(Collections.emptyList(), pageable, 0);
+        }
+
+        // Bulk fetch all vehicles for these users
+        List<Long> userIds = userList.stream().map(User::getId).toList();
+        List<Vehicle> allVehicles = vehicleRepository.findAll();
+        Map<Long, List<com.nerlogix.dto.VehicleDto>> vehiclesByOwner = new HashMap<>();
+        for (Vehicle v : allVehicles) {
+            if (v.getOwnerUser() != null && userIds.contains(v.getOwnerUser().getId())) {
+                vehiclesByOwner.computeIfAbsent(v.getOwnerUser().getId(), k -> new ArrayList<>())
+                        .add(com.nerlogix.dto.VehicleDto.fromEntity(v));
+            }
+        }
+
+        List<UserDto> dtos = userList.stream()
+                .map(u -> UserDto.fromEntity(u, vehiclesByOwner.getOrDefault(u.getId(), Collections.emptyList())))
+                .toList();
+
         return new PageImpl<>(dtos, pageable, page.getTotalElements());
     }
 

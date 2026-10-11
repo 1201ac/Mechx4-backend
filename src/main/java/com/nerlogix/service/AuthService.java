@@ -37,6 +37,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final LoginRateLimiter rateLimiter;
+    private final SseService sseService;
     private final long refreshTokenExpirationMs;
 
     public AuthService(
@@ -45,12 +46,14 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtTokenProvider tokenProvider,
             LoginRateLimiter rateLimiter,
+            SseService sseService,
             @Value("${nerlogix.jwt.refresh-token-expiration-ms:604800000}") long refreshTokenExpirationMs) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.rateLimiter = rateLimiter;
+        this.sseService = sseService;
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;
     }
 
@@ -77,7 +80,12 @@ public class AuthService {
         String rawRefreshToken = generateRawRefreshToken();
         saveRefreshToken(user, rawRefreshToken, UUID.randomUUID().toString());
 
-        return new AuthResponse(accessToken, rawRefreshToken, UserDto.fromEntity(user));
+        UserDto userDto = UserDto.fromEntity(user);
+        if (sseService != null) {
+            sseService.sendToRole("user.registered", userDto, Role.ADMIN, Role.MODERATOR);
+        }
+
+        return new AuthResponse(accessToken, rawRefreshToken, userDto);
     }
 
     @Transactional

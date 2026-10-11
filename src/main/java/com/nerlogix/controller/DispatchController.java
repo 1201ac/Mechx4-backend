@@ -74,4 +74,20 @@ public class DispatchController {
             @AuthenticationPrincipal User driver) {
         return ResponseEntity.ok(dispatchService.getPendingAssignmentsForDriver(driver));
     }
+
+    @PostMapping("/unassign/{shipmentId}")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    public ResponseEntity<Void> unassignShipment(
+            @PathVariable Long shipmentId,
+            @AuthenticationPrincipal User moderator) {
+        dispatchService.unassignShipment(shipmentId, moderator);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/drivers")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
+    public ResponseEntity<List<com.nerlogix.dto.DriverListItemDto>> getDrivers(
+            @RequestParam(required = false) String q) {
+        return ResponseEntity.ok(dispatchService.getDriversList(q));
+    }
 }
