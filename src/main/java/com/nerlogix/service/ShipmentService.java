@@ -69,22 +69,16 @@ public class ShipmentService {
         boolean isUserOnly = currentUser != null && currentUser.getRole() == Role.USER;
         Long effectiveDriverId = isUserOnly ? currentUser.getId() : driverUserId;
 
-        final String fQ = (q != null && !q.isBlank()) ? q.toLowerCase() : null;
+        org.springframework.data.jpa.domain.Specification<Shipment> spec = 
+                com.nerlogix.repository.specification.ShipmentSpecification.filter(
+                        status,
+                        effectiveDriverId,
+                        cargoCategory,
+                        priority,
+                        q
+                );
 
-        Page<Shipment> page = isUserOnly 
-                ? shipmentRepository.findByDriverUserId(effectiveDriverId, pageable)
-                : shipmentRepository.findAll(pageable);
-
-        List<ShipmentDto> filtered = page.getContent().stream()
-                .filter(s -> status == null || s.getStatus() == status)
-                .filter(s -> effectiveDriverId == null || (s.getDriverUser() != null && s.getDriverUser().getId().equals(effectiveDriverId)))
-                .filter(s -> cargoCategory == null || s.getCargoCategory() == cargoCategory)
-                .filter(s -> priority == null || s.getPriority() == priority)
-                .filter(s -> fQ == null || s.getCode().toLowerCase().contains(fQ) || (s.getCargoDescription() != null && s.getCargoDescription().toLowerCase().contains(fQ)))
-                .map(ShipmentDto::fromEntity)
-                .toList();
-
-        return new PageImpl<>(filtered, pageable, page.getTotalElements());
+        return shipmentRepository.findAll(spec, pageable).map(ShipmentDto::fromEntity);
     }
 
     public ShipmentDto getShipmentById(Long id, User currentUser) {

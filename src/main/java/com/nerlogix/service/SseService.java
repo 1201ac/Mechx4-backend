@@ -1,6 +1,7 @@
 package com.nerlogix.service;
 
 import com.nerlogix.entity.User;
+import com.nerlogix.model.enums.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,6 +19,7 @@ public class SseService {
     private static final Logger log = LoggerFactory.getLogger(SseService.class);
     
     private final Map<Long, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
+    private final Map<Long, Role> userRoles = new ConcurrentHashMap<>();
     private final List<SseEmitter> anonymousEmitters = new CopyOnWriteArrayList<>();
 
     public SseEmitter createEmitter(User currentUser) {
@@ -25,6 +27,9 @@ public class SseService {
 
         if (currentUser != null) {
             userEmitters.computeIfAbsent(currentUser.getId(), k -> new CopyOnWriteArrayList<>()).add(emitter);
+            if (currentUser.getRole() != null) {
+                userRoles.put(currentUser.getId(), currentUser.getRole());
+            }
         } else {
             anonymousEmitters.add(emitter);
         }
@@ -36,6 +41,7 @@ public class SseService {
                     list.remove(emitter);
                     if (list.isEmpty()) {
                         userEmitters.remove(currentUser.getId());
+                        userRoles.remove(currentUser.getId());
                     }
                 }
             } else {
@@ -57,16 +63,24 @@ public class SseService {
     }
 
     public void broadcast(String eventName, Object data) {
-        List<SseEmitter> allEmitters = new ArrayList<>(anonymousEmitters);
-        for (List<SseEmitter> list : userEmitters.values()) {
-            allEmitters.addAll(list);
-        }
-
-        for (SseEmitter emitter : allEmitters) {
+        // Send to anonymous
+        for (SseEmitter emitter : new ArrayList<>(anonymousEmitters)) {
             try {
                 emitter.send(SseEmitter.event().name(eventName).data(data));
             } catch (Exception e) {
-                // Ignore, onCompletion/onError cleanup will handle
+                anonymousEmitters.remove(emitter);
+            }
+        }
+
+        // Send to users
+        for (Map.Entry<Long, List<SseEmitter>> entry : userEmitters.entrySet()) {
+            List<SseEmitter> list = entry.getValue();
+            for (SseEmitter emitter : new ArrayList<>(list)) {
+                try {
+                    emitter.send(SseEmitter.event().name(eventName).data(data));
+                } catch (Exception e) {
+                    list.remove(emitter);
+                }
             }
         }
     }
@@ -85,11 +99,27 @@ public class SseService {
         }
     }
 
+    public void sendToRole(String eventName, Object data, Role... roles) {
+        if (roles == null || roles.length == 0) {
+            broadcast(eventName, data);
+            return;
+        }
+
+        Set<Role> allowedRoles = Set.of(roles);
+        for (Map.Entry<Long, Role> entry : userRoles.entrySet()) {
+            if (allowedRoles.contains(entry.getValue())) {
+                sendToUser(entry.getKey(), eventName, data);
+            }
+        }
+    }
+
     @Scheduled(fixedRate = 20000)
     public void sendHeartbeat() {
+        long now = System.currentTimeMillis();
+
         for (SseEmitter emitter : new ArrayList<>(anonymousEmitters)) {
             try {
-                emitter.send(SseEmitter.event().comment("heartbeat"));
+                emitter.send(SseEmitter.event().name("ping").data(now));
             } catch (Exception e) {
                 anonymousEmitters.remove(emitter);
             }
@@ -99,11 +129,16 @@ public class SseService {
             List<SseEmitter> list = entry.getValue();
             for (SseEmitter emitter : new ArrayList<>(list)) {
                 try {
-                    emitter.send(SseEmitter.event().comment("heartbeat"));
+                    emitter.send(SseEmitter.event().name("ping").data(now));
                 } catch (Exception e) {
                     list.remove(emitter);
                 }
             }
         }
+    }
+
+    public int getConnectedClientsCount() {
+        int userCount = userEmitters.values().stream().mapToInt(List::size).sum();
+        return anonymousEmitters.size() + userCount;
     }
 }

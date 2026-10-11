@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nerlogix.config.NerlogixProperties;
 import com.nerlogix.entity.*;
+import com.nerlogix.model.enums.Role;
 import com.nerlogix.model.enums.RoutePlanStatus;
 import com.nerlogix.model.enums.ShipmentStatus;
 import com.nerlogix.repository.*;
@@ -57,6 +58,10 @@ public class SimulationService {
         );
 
         long tickMs = nerlogixProperties.getSimulation().getTickMs();
+        int ticksPer15s = (int) Math.max(1, 15000L / (tickMs > 0 ? tickMs : 5000L));
+        boolean shouldPersistHistory = (tickCount % ticksPer15s == 0);
+
+        List<Map<String, Object>> batch = new ArrayList<>();
 
         for (Shipment s : activeShipments) {
             Vehicle v = s.getVehicle();
@@ -118,8 +123,8 @@ public class SimulationService {
             v.setLastSeen(LocalDateTime.now());
             vehicleRepository.save(v);
 
-            // Store position history every 5th tick
-            if (tickCount % 5 == 0) {
+            // Store position history every 15s
+            if (shouldPersistHistory) {
                 VehiclePosition pos = new VehiclePosition(v, lat, lng, heading, speedKmph);
                 vehiclePositionRepository.save(pos);
             }
@@ -146,16 +151,26 @@ public class SimulationService {
 
             shipmentRepository.save(s);
 
-            // Broadcast vehicle update
-            sseService.broadcast("vehicle.update", Map.of(
+            Map<String, Object> posData = Map.of(
                     "vehicleId", v.getId(),
                     "regNo", v.getRegNo(),
                     "lat", v.getLat(),
                     "lng", v.getLng(),
                     "heading", v.getHeading(),
                     "speedKmph", v.getSpeedKmph(),
-                    "progressPct", s.getProgressPct()
-            ));
+                    "progressPct", s.getProgressPct(),
+                    "shipmentId", s.getId()
+            );
+            batch.add(posData);
+
+            Long driverId = s.getDriverUser() != null ? s.getDriverUser().getId() : null;
+            if (driverId != null) {
+                sseService.sendToUser(driverId, "vehicles.positions", List.of(posData));
+            }
+        }
+
+        if (!batch.isEmpty()) {
+            sseService.sendToRole("vehicles.positions", batch, Role.MODERATOR, Role.ADMIN);
         }
     }
 

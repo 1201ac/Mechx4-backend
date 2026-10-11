@@ -7,6 +7,17 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/nerlogix;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:10}
+      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:2}
+      connection-timeout: ${SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT:10000}
+      max-lifetime: ${SPRING_DATASOURCE_HIKARI_MAX_LIFETIME:300000}
+      keepalive-time: ${SPRING_DATASOURCE_HIKARI_KEEPALIVE_TIME:120000}
+      data-source-properties:
+        rewriteBatchedStatements: true
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
   jpa:
     open-in-view: false
     hibernate:
@@ -23,6 +34,9 @@ spring:
 
 server:
   port: ${PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/xml,text/plain,application/javascript,text/css
 
 springdoc:
   api-docs:
@@ -41,4 +55,4 @@ nerlogix:
     auto-fetch: ${NERLOGIX_WEATHER_AUTO_FETCH:true}
   simulation:
     enabled: ${NERLOGIX_SIMULATION_ENABLED:true}
-    tick-ms: ${NERLOGIX_SIMULATION_TICK_MS:3000}
+    tick-ms: ${NERLOGIX_SIMULATION_TICK_MS:5000}

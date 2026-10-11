@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class VehicleService {
@@ -55,16 +56,21 @@ public class VehicleService {
         final VehicleType fType = typeEnum;
         final String fQ = (q != null && !q.isBlank()) ? q.toLowerCase() : null;
 
-        Page<Vehicle> page = vehicleRepository.findAll(pageable);
+        org.springframework.data.jpa.domain.Specification<Vehicle> spec = (root, query, cb) -> {
+            java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+            if (fStatus != null) {
+                predicates.add(cb.equal(root.get("status"), fStatus));
+            }
+            if (fType != null) {
+                predicates.add(cb.equal(root.get("type"), fType));
+            }
+            if (fQ != null) {
+                predicates.add(cb.like(cb.lower(root.get("regNo")), "%" + fQ + "%"));
+            }
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
 
-        List<VehicleDto> filtered = page.getContent().stream()
-                .filter(v -> fStatus == null || v.getStatus() == fStatus)
-                .filter(v -> fType == null || v.getType() == fType)
-                .filter(v -> fQ == null || v.getRegNo().toLowerCase().contains(fQ))
-                .map(VehicleDto::fromEntity)
-                .toList();
-
-        return new PageImpl<>(filtered, pageable, page.getTotalElements());
+        return vehicleRepository.findAll(spec, pageable).map(VehicleDto::fromEntity);
     }
 
     public VehicleDto getVehicleById(Long id) {
@@ -125,16 +131,16 @@ public class VehicleService {
     public void recordDriverPositions(User driver, List<VehiclePositionRequest> requests) {
         if (requests == null || requests.isEmpty()) return;
 
-        List<Shipment> activeShipments = shipmentRepository.findAll().stream()
-                .filter(s -> s.getDriverUser() != null && s.getDriverUser().getId().equals(driver.getId()))
-                .filter(s -> s.getStatus() == ShipmentStatus.IN_TRANSIT || s.getStatus() == ShipmentStatus.DELAYED || s.getStatus() == ShipmentStatus.ASSIGNED)
-                .toList();
+        Optional<Shipment> activeShipmentOpt = shipmentRepository.findFirstByDriverUserIdAndStatusIn(
+                driver.getId(),
+                List.of(ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELAYED, ShipmentStatus.ASSIGNED)
+        );
 
-        if (activeShipments.isEmpty()) {
+        if (activeShipmentOpt.isEmpty()) {
             return;
         }
 
-        Shipment activeShipment = activeShipments.get(0);
+        Shipment activeShipment = activeShipmentOpt.get();
         Vehicle vehicle = activeShipment.getVehicle();
         if (vehicle == null) return;
 

@@ -28,16 +28,19 @@ public class RoutePlannerService {
     private final RoadSegmentRepository roadSegmentRepository;
     private final SettingRepository settingRepository;
     private final ObjectMapper objectMapper;
+    private final RoadGraphCache roadGraphCache;
 
     public RoutePlannerService(
             RoadNodeRepository roadNodeRepository,
             RoadSegmentRepository roadSegmentRepository,
             SettingRepository settingRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RoadGraphCache roadGraphCache) {
         this.roadNodeRepository = roadNodeRepository;
         this.roadSegmentRepository = roadSegmentRepository;
         this.settingRepository = settingRepository;
         this.objectMapper = objectMapper;
+        this.roadGraphCache = roadGraphCache;
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +55,7 @@ public class RoutePlannerService {
                 .map(Boolean::parseBoolean)
                 .orElse(false);
 
-        List<RoadSegment> allSegments = roadSegmentRepository.findAll();
+        List<RoadSegment> allSegments = roadGraphCache.getSegments();
         List<RoadSegment> usableSegments = allSegments.stream()
                 .filter(s -> emergencyMode ? s.getStatus() == SegmentStatus.OPEN : s.getStatus() != SegmentStatus.BLOCKED)
                 .toList();
