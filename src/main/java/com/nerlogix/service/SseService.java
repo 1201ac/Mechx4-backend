@@ -87,16 +87,22 @@ public class SseService {
 
     @Scheduled(fixedRate = 20000)
     public void sendHeartbeat() {
-        List<SseEmitter> allEmitters = new ArrayList<>(anonymousEmitters);
-        for (List<SseEmitter> list : userEmitters.values()) {
-            allEmitters.addAll(list);
-        }
-
-        for (SseEmitter emitter : allEmitters) {
+        for (SseEmitter emitter : new ArrayList<>(anonymousEmitters)) {
             try {
                 emitter.send(SseEmitter.event().comment("heartbeat"));
             } catch (Exception e) {
-                // Ignore, clean up automatically
+                anonymousEmitters.remove(emitter);
+            }
+        }
+
+        for (Map.Entry<Long, List<SseEmitter>> entry : userEmitters.entrySet()) {
+            List<SseEmitter> list = entry.getValue();
+            for (SseEmitter emitter : new ArrayList<>(list)) {
+                try {
+                    emitter.send(SseEmitter.event().comment("heartbeat"));
+                } catch (Exception e) {
+                    list.remove(emitter);
+                }
             }
         }
     }

@@ -122,4 +122,46 @@ class AuthTest {
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    void testCurrentUserAndCorsPreflight() throws Exception {
+        LoginRequest userLogin = new LoginRequest("user@nerlogix.com", "Demo@1234");
+        MvcResult userRes = mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(userLogin)))
+                .andExpect(status().isOk()).andReturn();
+        String userToken = objectMapper.readTree(userRes.getResponse().getContentAsString()).get("accessToken").asText();
+
+        // 1. GET /api/auth/me -> 200 OK
+        mockMvc.perform(get("/api/auth/me")
+                .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("user@nerlogix.com"));
+
+        // 2. GET /auth/me (without /api) -> 200 OK
+        mockMvc.perform(get("/auth/me")
+                .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("user@nerlogix.com"));
+
+        // 3. GET /auth/me without token -> 401 Unauthorized
+        mockMvc.perform(get("/auth/me"))
+                .andExpect(status().isUnauthorized());
+
+        // 4. OPTIONS preflight for /auth/me with origin
+        mockMvc.perform(options("/auth/me")
+                .header("Origin", "https://ner-logix-frontend.vercel.app")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("Access-Control-Allow-Origin"));
+
+        // 5. OPTIONS preflight for /api/auth/me
+        mockMvc.perform(options("/api/auth/me")
+                .header("Origin", "https://ner-logix-frontend.vercel.app")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("Access-Control-Allow-Origin"));
+    }
 }

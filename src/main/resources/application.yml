@@ -35,6 +35,8 @@ nerlogix:
     secret: ${NERLOGIX_JWT_SECRET:dev_secret_key_must_be_at_least_32_bytes_long_for_security_reasons_12345}
     access-token-expiration-ms: 900000 # 15 minutes
     refresh-token-expiration-ms: 604800000 # 7 days
+  cors:
+    allowed-origins: ${NERLOGIX_CORS_ALLOWED_ORIGINS:https://ner-logix-frontend.vercel.app,http://localhost:5173,http://localhost:8080}
   weather:
     auto-fetch: ${NERLOGIX_WEATHER_AUTO_FETCH:true}
   simulation:

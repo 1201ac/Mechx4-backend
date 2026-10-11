@@ -34,7 +34,7 @@ public class SecurityConfig {
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
-            @Value("${nerlogix.cors.allowed-origins:http://localhost:5173,http://localhost:8080}") String allowedOriginsStr) {
+            @Value("${nerlogix.cors.allowed-origins:https://ner-logix-frontend.vercel.app,http://localhost:5173,http://localhost:8080}") String allowedOriginsStr) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
         this.allowedOriginsStr = allowedOriginsStr;
@@ -57,10 +57,11 @@ public class SecurityConfig {
         } else {
             configuration.setAllowedOrigins(origins);
         }
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-API-Key", "X-Requested-With"));
-        configuration.setExposedHeaders(List.of("Authorization"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Authorization", "Content-Type", "Event-Stream"));
         configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -86,9 +87,15 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> auth
+                // Allow all OPTIONS preflight requests immediately
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // Public & health endpoints
                 .requestMatchers(
                     "/api/health",
+                    "/health",
                     "/api/public/**",
+                    "/public/**",
                     "/api/auth/register",
                     "/api/auth/login",
                     "/api/auth/refresh",
@@ -112,23 +119,25 @@ public class SecurityConfig {
                 ).permitAll()
 
                 // Integrations endpoints (authenticated via ApiKeyAuthenticationFilter)
-                .requestMatchers("/api/integrations/**").permitAll()
+                .requestMatchers("/api/integrations/**", "/integrations/**").permitAll()
 
                 // Admin endpoints
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/**", "/admin/**").hasRole("ADMIN")
 
                 // Moderator & Admin endpoints
-                .requestMatchers(HttpMethod.PATCH, "/api/roads/*/status").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/field-reports/*/verify").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/field-reports/*/reject").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/incidents/*/resolve").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/alerts/*/ack").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/alerts/*/resolve").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/notifications/broadcast").hasAnyRole("MODERATOR", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/settings/emergency").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/roads/*/status", "/roads/*/status").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/field-reports/*/verify", "/field-reports/*/verify").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/field-reports/*/reject", "/field-reports/*/reject").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/incidents/*/resolve", "/incidents/*/resolve").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/alerts/*/ack", "/alerts/*/ack").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/alerts/*/resolve", "/alerts/*/resolve").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/notifications/broadcast", "/notifications/broadcast").hasAnyRole("MODERATOR", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/settings/emergency", "/settings/emergency").hasAnyRole("MODERATOR", "ADMIN")
 
                 // Authenticated endpoints for all roles
                 .requestMatchers("/api/**").authenticated()
+                .requestMatchers("/auth/**").authenticated()
+                .requestMatchers("/realtime/**").authenticated()
                 .anyRequest().permitAll()
             )
             .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

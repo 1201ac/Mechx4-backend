@@ -106,6 +106,9 @@ public class SecurityFeaturesTest {
         // Header token -> 200 OK
         mockMvc.perform(get("/api/realtime/stream").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+
+        mockMvc.perform(get("/realtime/stream").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
     }
 
     @Test
