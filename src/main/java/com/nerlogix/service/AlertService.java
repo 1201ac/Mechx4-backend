@@ -152,6 +152,7 @@ public class AlertService {
     }
 
     // User Notifications API
+    @Transactional(readOnly = true)
     public Page<NotificationDto> getUserNotifications(User user, Pageable pageable) {
         Page<Notification> page = notificationRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), pageable);
         List<NotificationDto> dtos = page.getContent().stream().map(n -> {

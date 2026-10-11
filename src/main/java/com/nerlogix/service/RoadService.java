@@ -34,6 +34,7 @@ public class RoadService {
     private final ApplicationEventPublisher eventPublisher;
     private final com.nerlogix.service.risk.RiskEngine riskEngine;
     private final ObjectMapper objectMapper;
+    private final SystemCacheService systemCacheService;
 
     public RoadService(
             RoadSegmentRepository roadSegmentRepository,
@@ -41,13 +42,15 @@ public class RoadService {
             AuditLogService auditLogService,
             ApplicationEventPublisher eventPublisher,
             com.nerlogix.service.risk.RiskEngine riskEngine,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            SystemCacheService systemCacheService) {
         this.roadSegmentRepository = roadSegmentRepository;
         this.roadStatusHistoryRepository = roadStatusHistoryRepository;
         this.auditLogService = auditLogService;
         this.eventPublisher = eventPublisher;
         this.riskEngine = riskEngine;
         this.objectMapper = objectMapper;
+        this.systemCacheService = systemCacheService;
     }
 
     @Transactional(readOnly = true)
@@ -185,6 +188,7 @@ public class RoadService {
         ));
 
         riskEngine.computeSegmentRisk(segment);
+        systemCacheService.evictRoadRelated();
 
         return toDto(segment);
     }

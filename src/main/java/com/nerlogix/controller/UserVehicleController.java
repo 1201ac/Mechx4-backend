@@ -44,6 +44,7 @@ public class UserVehicleController {
     }
 
     @GetMapping
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ResponseEntity<List<VehicleDto>> getMyVehicles(@AuthenticationPrincipal User currentUser) {
         List<Vehicle> vehicles = vehicleRepository.findByOwnerUserId(currentUser.getId());
         List<VehicleDto> dtos = vehicles.stream().map(VehicleDto::fromEntity).toList();

@@ -57,6 +57,7 @@ public class ShipmentService {
         this.objectMapper = objectMapper;
     }
 
+    @Transactional(readOnly = true)
     public Page<ShipmentDto> getShipments(
             User currentUser,
             ShipmentStatus status,
@@ -81,6 +82,7 @@ public class ShipmentService {
         return shipmentRepository.findAll(spec, pageable).map(ShipmentDto::fromEntity);
     }
 
+    @Transactional(readOnly = true)
     public ShipmentDto getShipmentById(Long id, User currentUser) {
         Shipment s = shipmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment not found: " + id));
@@ -407,6 +409,7 @@ public class ShipmentService {
         return ShipmentDto.fromEntity(s);
     }
 
+    @Transactional(readOnly = true)
     public RoutePlanDto getRouteProposal(Long shipmentId) {
         return routePlanRepository.findFirstByShipmentIdAndStatusOrderByIdDesc(shipmentId, RoutePlanStatus.PROPOSED)
                 .map(RoutePlanDto::fromEntity)

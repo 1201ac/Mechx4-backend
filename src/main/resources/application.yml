@@ -54,5 +54,5 @@ nerlogix:
   weather:
     auto-fetch: ${NERLOGIX_WEATHER_AUTO_FETCH:true}
   simulation:
-    enabled: ${NERLOGIX_SIMULATION_ENABLED:true}
+    enabled: ${NERLOGIX_SIMULATION_ENABLED:false}
     tick-ms: ${NERLOGIX_SIMULATION_TICK_MS:5000}

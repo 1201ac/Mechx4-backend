@@ -6,6 +6,7 @@ import com.nerlogix.model.enums.AlertStatus;
 import com.nerlogix.model.enums.SegmentStatus;
 import com.nerlogix.model.enums.ShipmentStatus;
 import com.nerlogix.repository.*;
+import com.nerlogix.service.SystemCacheService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,18 +23,21 @@ public class PublicController {
     private final RoadSegmentRepository roadSegmentRepository;
     private final ShipmentRepository shipmentRepository;
     private final AlertRepository alertRepository;
+    private final SystemCacheService systemCacheService;
 
     public PublicController(
             DistrictRepository districtRepository,
             RoadNodeRepository roadNodeRepository,
             RoadSegmentRepository roadSegmentRepository,
             ShipmentRepository shipmentRepository,
-            AlertRepository alertRepository) {
+            AlertRepository alertRepository,
+            SystemCacheService systemCacheService) {
         this.districtRepository = districtRepository;
         this.roadNodeRepository = roadNodeRepository;
         this.roadSegmentRepository = roadSegmentRepository;
         this.shipmentRepository = shipmentRepository;
         this.alertRepository = alertRepository;
+        this.systemCacheService = systemCacheService;
     }
 
     @GetMapping("/network")
@@ -62,13 +66,16 @@ public class PublicController {
 
     @GetMapping("/overview")
     public ResponseEntity<PublicOverviewResponse> getOverview() {
-        long districtsCount = districtRepository.count();
-        long segmentsCount = roadSegmentRepository.count();
-        long movingCount = shipmentRepository.findByStatus(ShipmentStatus.IN_TRANSIT).size();
-        long disruptionsCount = roadSegmentRepository.findByStatus(SegmentStatus.BLOCKED).size()
-                + roadSegmentRepository.findByStatus(SegmentStatus.RESTRICTED).size();
+        PublicOverviewResponse response = systemCacheService.getOrCompute("public.overview", () -> {
+            long districtsCount = districtRepository.count();
+            long segmentsCount = roadSegmentRepository.count();
+            long movingCount = shipmentRepository.findByStatus(ShipmentStatus.IN_TRANSIT).size();
+            long disruptionsCount = roadSegmentRepository.findByStatus(SegmentStatus.BLOCKED).size()
+                    + roadSegmentRepository.findByStatus(SegmentStatus.RESTRICTED).size();
+            return new PublicOverviewResponse(districtsCount, segmentsCount, movingCount, disruptionsCount);
+        });
 
-        return ResponseEntity.ok(new PublicOverviewResponse(districtsCount, segmentsCount, movingCount, disruptionsCount));
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/config")
@@ -76,8 +83,8 @@ public class PublicController {
         String apiKey = System.getenv().getOrDefault("VITE_GOOGLE_MAPS_API_KEY", System.getenv().getOrDefault("GOOGLE_MAPS_API_KEY", ""));
         String mapId = System.getenv().getOrDefault("VITE_GOOGLE_MAPS_MAP_ID", System.getenv().getOrDefault("GOOGLE_MAPS_MAP_ID", ""));
         return ResponseEntity.ok(java.util.Map.of(
-                "googleMapsApiKey", apiKey,
-                "googleMapsMapId", mapId
+            "googleMapsApiKey", apiKey,
+            "googleMapsMapId", mapId
         ));
     }
 }

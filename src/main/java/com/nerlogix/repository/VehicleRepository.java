@@ -10,5 +10,7 @@ import java.util.Optional;
 public interface VehicleRepository extends JpaRepository<Vehicle, Long>, JpaSpecificationExecutor<Vehicle> {
     Optional<Vehicle> findByRegNo(String regNo);
     List<Vehicle> findByStatus(VehicleStatus status);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"ownerUser"})
     List<Vehicle> findByOwnerUserId(Long ownerUserId);
 }

@@ -21,6 +21,7 @@ public class DashboardService {
     private final DistrictStockRepository districtStockRepository;
     private final SettingRepository settingRepository;
     private final IncidentRepository incidentRepository;
+    private final SystemCacheService systemCacheService;
 
     public DashboardService(
             DistrictRepository districtRepository,
@@ -31,7 +32,8 @@ public class DashboardService {
             AlertRepository alertRepository,
             DistrictStockRepository districtStockRepository,
             SettingRepository settingRepository,
-            IncidentRepository incidentRepository) {
+            IncidentRepository incidentRepository,
+            SystemCacheService systemCacheService) {
         this.districtRepository = districtRepository;
         this.roadSegmentRepository = roadSegmentRepository;
         this.vehicleRepository = vehicleRepository;
@@ -41,16 +43,23 @@ public class DashboardService {
         this.districtStockRepository = districtStockRepository;
         this.settingRepository = settingRepository;
         this.incidentRepository = incidentRepository;
+        this.systemCacheService = systemCacheService;
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> getSummary() {
-        long totalDistricts = districtRepository.count();
+        return systemCacheService.getOrCompute("dashboard.summary", this::computeSummary);
+    }
 
-        // Calculate degraded/inaccessible districts
+    private Map<String, Object> computeSummary() {
         List<District> districts = districtRepository.findAll();
+        List<RoadSegment> allSegments = roadSegmentRepository.findAll();
+        Map<Long, List<RoadSegment>> segmentsByDistrict = groupSegmentsByDistrict(allSegments);
+
+        long totalDistricts = districts.size();
+
         long degradedCount = districts.stream()
-                .filter(d -> calculateDistrictConnectivity(d) < 75.0)
+                .filter(d -> calculateDistrictConnectivity(d, segmentsByDistrict) < 75.0)
                 .count();
 
         long activeVehicles = vehicleRepository.findAll().stream()
@@ -94,11 +103,18 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getDistrictConnectivityList() {
+        return systemCacheService.getOrCompute("dashboard.districts", this::computeDistrictConnectivityList);
+    }
+
+    private List<Map<String, Object>> computeDistrictConnectivityList() {
         List<District> districts = districtRepository.findAll();
+        List<RoadSegment> allSegments = roadSegmentRepository.findAll();
+        Map<Long, List<RoadSegment>> segmentsByDistrict = groupSegmentsByDistrict(allSegments);
+
         List<Map<String, Object>> result = new ArrayList<>();
 
         for (District d : districts) {
-            double score = calculateDistrictConnectivity(d);
+            double score = calculateDistrictConnectivity(d, segmentsByDistrict);
             String category = score >= 75.0 ? "GOOD" : score >= 40.0 ? "DEGRADED" : "POOR";
             if (score <= 0.0) category = "INACCESSIBLE";
 
@@ -115,6 +131,10 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getSupplyStatus() {
+        return systemCacheService.getOrCompute("dashboard.supply", this::computeSupplyStatus);
+    }
+
+    private List<Map<String, Object>> computeSupplyStatus() {
         List<DistrictStock> stocks = districtStockRepository.findAll();
         List<Map<String, Object>> result = new ArrayList<>();
 
@@ -136,6 +156,10 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getAnalyticsCharts() {
+        return systemCacheService.getOrCompute("dashboard.charts", this::computeAnalyticsCharts);
+    }
+
+    private Map<String, Object> computeAnalyticsCharts() {
         List<RoadSegment> segments = roadSegmentRepository.findAll();
         long openCount = segments.stream().filter(s -> s.getStatus() == SegmentStatus.OPEN).count();
         long restrictedCount = segments.stream().filter(s -> s.getStatus() == SegmentStatus.RESTRICTED).count();
@@ -175,6 +199,10 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getMovementStatus() {
+        return systemCacheService.getOrCompute("dashboard.movement", 10_000L, this::computeMovementStatus);
+    }
+
+    private Map<String, Object> computeMovementStatus() {
         List<Shipment> inTransit = shipmentRepository.findByStatusIn(List.of(ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELAYED));
         List<Vehicle> activeVehicles = vehicleRepository.findByStatus(VehicleStatus.ON_TRIP);
 
@@ -201,6 +229,10 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getEmergencyDashboard() {
+        return systemCacheService.getOrCompute("dashboard.emergency", this::computeEmergencyDashboard);
+    }
+
+    private Map<String, Object> computeEmergencyDashboard() {
         boolean emergencyMode = settingRepository.findBySettingKey("emergency_mode")
                 .map(Setting::getSettingValue)
                 .map(Boolean::parseBoolean)
@@ -216,8 +248,12 @@ public class DashboardService {
                 .map(AlertDto::fromEntity)
                 .toList();
 
-        List<Map<String, Object>> hospitalDepotStatus = districtRepository.findAll().stream().map(d -> {
-            double score = calculateDistrictConnectivity(d);
+        List<District> districts = districtRepository.findAll();
+        List<RoadSegment> allSegments = roadSegmentRepository.findAll();
+        Map<Long, List<RoadSegment>> segmentsByDistrict = groupSegmentsByDistrict(allSegments);
+
+        List<Map<String, Object>> hospitalDepotStatus = districts.stream().map(d -> {
+            double score = calculateDistrictConnectivity(d, segmentsByDistrict);
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("districtName", d.getName());
             map.put("state", d.getState());
@@ -234,12 +270,36 @@ public class DashboardService {
         return res;
     }
 
-    private double calculateDistrictConnectivity(District district) {
-        List<RoadSegment> segments = roadSegmentRepository.findAll().stream()
-                .filter(s -> (s.getFromNode() != null && s.getFromNode().getDistrict() != null && s.getFromNode().getDistrict().getId().equals(district.getId())) ||
-                             (s.getToNode() != null && s.getToNode().getDistrict() != null && s.getToNode().getDistrict().getId().equals(district.getId())))
-                .toList();
+    public Map<Long, List<RoadSegment>> groupSegmentsByDistrict(List<RoadSegment> segments) {
+        Map<Long, List<RoadSegment>> map = new HashMap<>();
+        for (RoadSegment s : segments) {
+            Long fromDistId = (s.getFromNode() != null && s.getFromNode().getDistrict() != null)
+                    ? s.getFromNode().getDistrict().getId() : null;
+            Long toDistId = (s.getToNode() != null && s.getToNode().getDistrict() != null)
+                    ? s.getToNode().getDistrict().getId() : null;
 
+            if (fromDistId != null) {
+                map.computeIfAbsent(fromDistId, k -> new ArrayList<>()).add(s);
+            }
+            if (toDistId != null && !toDistId.equals(fromDistId)) {
+                map.computeIfAbsent(toDistId, k -> new ArrayList<>()).add(s);
+            }
+        }
+        return map;
+    }
+
+    public double calculateDistrictConnectivity(District district) {
+        List<RoadSegment> allSegments = roadSegmentRepository.findAll();
+        Map<Long, List<RoadSegment>> segmentsByDistrict = groupSegmentsByDistrict(allSegments);
+        return calculateDistrictConnectivity(district, segmentsByDistrict);
+    }
+
+    public double calculateDistrictConnectivity(District district, Map<Long, List<RoadSegment>> segmentsByDistrict) {
+        List<RoadSegment> segments = segmentsByDistrict.getOrDefault(district.getId(), Collections.emptyList());
+        return computeConnectivityScore(segments);
+    }
+
+    private double computeConnectivityScore(List<RoadSegment> segments) {
         if (segments.isEmpty()) return 100.0;
 
         double weightedSum = 0.0;

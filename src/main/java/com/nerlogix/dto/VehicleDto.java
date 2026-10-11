@@ -20,8 +20,19 @@ public record VehicleDto(
     String ownerName
 ) {
     public static VehicleDto fromEntity(Vehicle v) {
-        Long ownerId = v.getOwnerUser() != null ? v.getOwnerUser().getId() : null;
-        String ownerName = v.getOwnerUser() != null ? v.getOwnerUser().getName() : null;
+        if (v == null) return null;
+        Long ownerId = null;
+        String ownerName = null;
+        try {
+            if (v.getOwnerUser() != null) {
+                ownerId = v.getOwnerUser().getId();
+                if (org.hibernate.Hibernate.isInitialized(v.getOwnerUser())) {
+                    ownerName = v.getOwnerUser().getName();
+                }
+            }
+        } catch (Exception ignored) {
+            // Uninitialized proxy outside active session
+        }
 
         return new VehicleDto(
             v.getId(),

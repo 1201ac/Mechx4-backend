@@ -15,16 +15,19 @@ public class SettingService {
     private final RiskEngine riskEngine;
     private final SseService sseService;
     private final AuditService auditService;
+    private final SystemCacheService systemCacheService;
 
     public SettingService(
             SettingRepository settingRepository,
             RiskEngine riskEngine,
             SseService sseService,
-            AuditService auditService) {
+            AuditService auditService,
+            SystemCacheService systemCacheService) {
         this.settingRepository = settingRepository;
         this.riskEngine = riskEngine;
         this.sseService = sseService;
         this.auditService = auditService;
+        this.systemCacheService = systemCacheService;
     }
 
     @Transactional(readOnly = true)
@@ -51,6 +54,9 @@ public class SettingService {
 
         // Audit log
         auditService.log(currentUser, "TOGGLE_EMERGENCY_MODE", "SETTING", setting.getId(), "Emergency mode set to " + enabled);
+
+        // Evict cache on emergency mode change
+        systemCacheService.evictEmergencyRelated();
 
         return Map.of("emergencyMode", enabled);
     }

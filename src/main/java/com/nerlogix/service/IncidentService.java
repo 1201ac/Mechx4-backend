@@ -29,6 +29,7 @@ public class IncidentService {
     private final AuditLogService auditLogService;
     private final RiskEngine riskEngine;
     private final SseService sseService;
+    private final SystemCacheService systemCacheService;
 
     public IncidentService(
             IncidentRepository incidentRepository,
@@ -38,7 +39,8 @@ public class IncidentService {
             DistrictRepository districtRepository,
             AuditLogService auditLogService,
             RiskEngine riskEngine,
-            SseService sseService) {
+            SseService sseService,
+            SystemCacheService systemCacheService) {
         this.incidentRepository = incidentRepository;
         this.incidentEventRepository = incidentEventRepository;
         this.roadSegmentRepository = roadSegmentRepository;
@@ -47,6 +49,7 @@ public class IncidentService {
         this.auditLogService = auditLogService;
         this.riskEngine = riskEngine;
         this.sseService = sseService;
+        this.systemCacheService = systemCacheService;
     }
 
     public Page<IncidentDto> getIncidents(
@@ -117,6 +120,7 @@ public class IncidentService {
         }
 
         auditLogService.recordAudit(currentUser, "INCIDENT_CREATED", "INCIDENT", inc.getId(), "Created incident " + inc.getType(), "127.0.0.1");
+        systemCacheService.evictIncidentRelated();
         return IncidentDto.fromEntity(inc);
     }
 
@@ -167,6 +171,7 @@ public class IncidentService {
 
         auditLogService.recordAudit(moderator, "INCIDENT_RESOLVED", "INCIDENT", inc.getId(), "Resolved incident", "127.0.0.1");
         sseService.broadcast("incident.updated", Map.of("id", inc.getId(), "status", inc.getStatus()));
+        systemCacheService.evictIncidentRelated();
 
         return IncidentDto.fromEntity(inc);
     }

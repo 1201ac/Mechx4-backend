@@ -19,6 +19,7 @@ public class MapService {
     private final IncidentRepository incidentRepository;
     private final DistrictRepository districtRepository;
     private final WeatherLogRepository weatherLogRepository;
+    private final SystemCacheService systemCacheService;
 
     public MapService(
             RoadSegmentRepository roadSegmentRepository,
@@ -26,21 +27,31 @@ public class MapService {
             VehicleRepository vehicleRepository,
             IncidentRepository incidentRepository,
             DistrictRepository districtRepository,
-            WeatherLogRepository weatherLogRepository) {
+            WeatherLogRepository weatherLogRepository,
+            SystemCacheService systemCacheService) {
         this.roadSegmentRepository = roadSegmentRepository;
         this.roadNodeRepository = roadNodeRepository;
         this.vehicleRepository = vehicleRepository;
         this.incidentRepository = incidentRepository;
         this.districtRepository = districtRepository;
         this.weatherLogRepository = weatherLogRepository;
+        this.systemCacheService = systemCacheService;
     }
 
     @Transactional(readOnly = true)
     public List<MapSegmentDto> getSegments(Double minLat, Double maxLat, Double minLng, Double maxLng) {
-        List<RoadSegment> segments = roadSegmentRepository.findAll();
-        return segments.stream()
-                .filter(s -> inBbox(s.getFromNode().getLat(), s.getFromNode().getLng(), minLat, maxLat, minLng, maxLng) ||
-                             inBbox(s.getToNode().getLat(), s.getToNode().getLng(), minLat, maxLat, minLng, maxLng))
+        List<MapSegmentDto> allSegments = systemCacheService.getOrCompute("map.segments", this::loadAllMapSegments);
+        if (minLat == null && maxLat == null && minLng == null && maxLng == null) {
+            return allSegments;
+        }
+        return allSegments.stream()
+                .filter(s -> inBbox(s.fromLat(), s.fromLng(), minLat, maxLat, minLng, maxLng) ||
+                             inBbox(s.toLat(), s.toLng(), minLat, maxLat, minLng, maxLng))
+                .toList();
+    }
+
+    private List<MapSegmentDto> loadAllMapSegments() {
+        return roadSegmentRepository.findAll().stream()
                 .map(s -> new MapSegmentDto(
                         s.getId(),
                         s.getName(),

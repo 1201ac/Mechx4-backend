@@ -65,6 +65,7 @@ public class AdminService {
         this.districtRepository = districtRepository;
     }
 
+    @Transactional(readOnly = true)
     public Page<UserDto> getUsers(Pageable pageable) {
         Page<User> page = userRepository.findAll(pageable);
         List<UserDto> dtos = page.getContent().stream().map(UserDto::fromEntity).toList();
@@ -126,10 +127,12 @@ public class AdminService {
         refreshTokenRepository.deleteByUser(u);
     }
 
+    @Transactional(readOnly = true)
     public Page<AuditLog> getAuditLogs(Pageable pageable) {
         return auditLogRepository.findAllByOrderByCreatedAtDesc(pageable);
     }
 
+    @Transactional(readOnly = true)
     public List<RuleConfig> getRuleConfigs() {
         return ruleConfigService.getAllRules();
     }
@@ -143,6 +146,7 @@ public class AdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("Rule not found: " + key));
     }
 
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getApiKeys() {
         return apiKeyRepository.findAll().stream().map(k -> {
             Map<String, Object> map = new LinkedHashMap<>();
@@ -237,6 +241,7 @@ public class AdminService {
         );
     }
 
+    @Transactional(readOnly = true)
     public List<District> getAllDistricts() {
         return districtRepository.findAll();
     }
@@ -256,6 +261,7 @@ public class AdminService {
         return d;
     }
 
+    @Transactional(readOnly = true)
     public List<RoadSegment> getAllRoads() {
         return roadSegmentRepository.findAll();
     }

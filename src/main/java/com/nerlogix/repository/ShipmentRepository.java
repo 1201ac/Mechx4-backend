@@ -23,10 +23,10 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long>, JpaSp
     Page<Shipment> findByDriverUserId(Long driverUserId, Pageable pageable);
 
     @Override
-    @EntityGraph(attributePaths = {"originNode", "destinationNode", "vehicle", "driverUser"})
+    @EntityGraph(attributePaths = {"originNode", "destinationNode", "vehicle", "vehicle.ownerUser", "driverUser", "originNode.district", "destinationNode.district"})
     Page<Shipment> findAll(Specification<Shipment> spec, Pageable pageable);
 
     @Override
-    @EntityGraph(attributePaths = {"originNode", "destinationNode", "vehicle", "driverUser"})
+    @EntityGraph(attributePaths = {"originNode", "destinationNode", "vehicle", "vehicle.ownerUser", "driverUser", "originNode.district", "destinationNode.district"})
     Optional<Shipment> findById(Long id);
 }

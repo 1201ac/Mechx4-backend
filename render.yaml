@@ -1,6 +1,7 @@
 services:
   - type: web
     name: nerlogix-backend
+    region: singapore
     env: docker
     dockerfilePath: Dockerfile
     healthCheckPath: /api/health

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,16 +27,19 @@ public class WeatherService {
     private final DistrictRepository districtRepository;
     private final RiskEngine riskEngine;
     private final SseService sseService;
+    private final SystemCacheService systemCacheService;
 
     public WeatherService(
             WeatherLogRepository weatherLogRepository,
             DistrictRepository districtRepository,
             RiskEngine riskEngine,
-            SseService sseService) {
+            SseService sseService,
+            SystemCacheService systemCacheService) {
         this.weatherLogRepository = weatherLogRepository;
         this.districtRepository = districtRepository;
         this.riskEngine = riskEngine;
         this.sseService = sseService;
+        this.systemCacheService = systemCacheService;
     }
 
     @Transactional(readOnly = true)
@@ -54,13 +58,29 @@ public class WeatherService {
 
     @Transactional(readOnly = true)
     public List<DistrictWeatherDto> getDistrictWeatherList() {
+        return systemCacheService.getOrCompute("weather.districts", this::computeDistrictWeatherList);
+    }
+
+    private List<DistrictWeatherDto> computeDistrictWeatherList() {
         List<District> districts = districtRepository.findAll();
+        List<WeatherLog> allLogs = weatherLogRepository.findAll();
+
+        Map<Long, WeatherLog> latestLogByDistrict = new HashMap<>();
+        for (WeatherLog log : allLogs) {
+            if (log.getDistrict() != null && log.getDistrict().getId() != null) {
+                Long dId = log.getDistrict().getId();
+                WeatherLog current = latestLogByDistrict.get(dId);
+                if (current == null || (log.getLoggedAt() != null && current.getLoggedAt() != null && log.getLoggedAt().isAfter(current.getLoggedAt()))) {
+                    latestLogByDistrict.put(dId, log);
+                }
+            }
+        }
+
         List<DistrictWeatherDto> list = new ArrayList<>();
 
         for (District d : districts) {
-            List<WeatherLog> logs = weatherLogRepository.findByDistrictIdOrderByLoggedAtDesc(d.getId());
-            if (!logs.isEmpty()) {
-                WeatherLog w = logs.get(0);
+            WeatherLog w = latestLogByDistrict.get(d.getId());
+            if (w != null) {
                 list.add(new DistrictWeatherDto(
                         d.getId(),
                         d.getName(),
@@ -103,6 +123,9 @@ public class WeatherService {
         logEntry.setLoggedAt(LocalDateTime.now());
 
         weatherLogRepository.save(logEntry);
+
+        // Evict cache on weather change
+        systemCacheService.evictWeatherRelated();
 
         // Recompute risk for affected road segments touching this district
         riskEngine.recomputeAffectedSegmentsForDistrict(district.getId());

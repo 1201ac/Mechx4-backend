@@ -42,6 +42,7 @@ public class VehicleService {
         this.sseService = sseService;
     }
 
+    @Transactional(readOnly = true)
     public Page<VehicleDto> getVehicles(String status, String type, String q, Pageable pageable) {
         VehicleStatus statusEnum = null;
         if (status != null && !status.isBlank()) {
@@ -120,6 +121,7 @@ public class VehicleService {
         vehicleRepository.delete(v);
     }
 
+    @Transactional(readOnly = true)
     public List<VehiclePositionDto> getVehicleTrail(Long id) {
         Vehicle v = vehicleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vehicle not found: " + id));
