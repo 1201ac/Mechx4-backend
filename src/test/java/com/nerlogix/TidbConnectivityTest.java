@@ -7,8 +7,13 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Disabled("Skipped during test runs per production safety rules to prevent hitting production database")
+@EnabledIfEnvironmentVariable(named = "RUN_TIDB_INTEGRATION_TEST", matches = "true")
 class TidbConnectivityTest {
 
     @Test
