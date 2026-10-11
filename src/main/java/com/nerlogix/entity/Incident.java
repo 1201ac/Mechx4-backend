@@ -49,7 +49,7 @@ public class Incident {
     @Column(name = "report_id")
     private Long reportId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "created_by")
     private User createdBy;
 

@@ -34,7 +34,7 @@ public class SecurityConfig {
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
-            @Value("${nerlogix.cors.allowed-origins:https://ner-logix-frontend.vercel.app,http://localhost:5173,http://localhost:8080}") String allowedOriginsStr) {
+            @Value("${nerlogix.cors.allowed-origins:https://ner-logix-frontend.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:8080}") String allowedOriginsStr) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
         this.allowedOriginsStr = allowedOriginsStr;
