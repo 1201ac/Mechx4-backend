@@ -63,13 +63,26 @@ public class RoutePlannerService {
         Set<Long> penalizedEdgeIds = new HashSet<>();
         List<List<RoadSegment>> foundPaths = new ArrayList<>();
 
-        for (int attempt = 0; attempt < 3; attempt++) {
+        for (int attempt = 0; attempt < 6 && foundPaths.size() < 3; attempt++) {
             List<RoadSegment> path = runDijkstra(origin.getId(), destination.getId(), usableSegments, penalizedEdgeIds, emergencyMode);
             if (path == null || path.isEmpty()) break;
 
-            // Check if path is duplicate
-            boolean isDuplicate = foundPaths.stream().anyMatch(existing -> getSegmentIds(existing).equals(getSegmentIds(path)));
-            if (!isDuplicate) {
+            double pathTotalKm = path.stream().mapToDouble(s -> s.getLengthKm() != null ? s.getLengthKm() : 10.0).sum();
+            boolean tooSimilar = false;
+
+            for (List<RoadSegment> existing : foundPaths) {
+                Set<Long> existingIds = new HashSet<>(getSegmentIds(existing));
+                double sharedKm = path.stream()
+                        .filter(s -> existingIds.contains(s.getId()))
+                        .mapToDouble(s -> s.getLengthKm() != null ? s.getLengthKm() : 10.0)
+                        .sum();
+                if (pathTotalKm > 0 && (sharedKm / pathTotalKm) > 0.80) {
+                    tooSimilar = true;
+                    break;
+                }
+            }
+
+            if (!tooSimilar) {
                 foundPaths.add(path);
             }
 
@@ -84,7 +97,33 @@ public class RoutePlannerService {
         List<RouteOptionDto> routeOptions = new ArrayList<>();
         for (int i = 0; i < foundPaths.size(); i++) {
             List<RoadSegment> path = foundPaths.get(i);
-            routeOptions.add(buildRouteOptionDto(i + 1, path, origin, destination, emergencyMode));
+            String label = i == 0 ? "Fastest" : (i == 1 ? "Safest" : "Balanced");
+            routeOptions.add(buildRouteOptionDto(i + 1, path, origin, destination, emergencyMode, label));
+        }
+
+        if (routeOptions.size() > 1) {
+            int safestIdx = 0;
+            double minRisk = Double.MAX_VALUE;
+            for (int i = 0; i < routeOptions.size(); i++) {
+                if (routeOptions.get(i).riskScore() < minRisk) {
+                    minRisk = routeOptions.get(i).riskScore();
+                    safestIdx = i;
+                }
+            }
+            if (safestIdx != 0) {
+                List<RouteOptionDto> updated = new ArrayList<>();
+                for (int i = 0; i < routeOptions.size(); i++) {
+                    RouteOptionDto o = routeOptions.get(i);
+                    String lbl = (i == 0) ? "Fastest" : (i == safestIdx ? "Safest" : "Balanced");
+                    updated.add(new RouteOptionDto(
+                            o.optionIndex(), o.name(), o.distanceKm(), o.etaMinutes(), o.riskScore(),
+                            o.riskCategory(), o.expectedDelayMin(), o.reason(), o.geometry(),
+                            o.segmentIds(), o.segmentNames(), o.isEmergencyOptimized(),
+                            o.nodeIds(), lbl, o.highlights()
+                    ));
+                }
+                routeOptions = updated;
+            }
         }
 
         return routeOptions;
@@ -161,7 +200,8 @@ public class RoutePlannerService {
             List<RoadSegment> path,
             RoadNode origin,
             RoadNode destination,
-            boolean emergencyMode) {
+            boolean emergencyMode,
+            String label) {
 
         double totalDistance = 0.0;
         double totalBaseTimeMin = 0.0;
@@ -172,10 +212,18 @@ public class RoutePlannerService {
         List<Long> segmentIds = new ArrayList<>();
         List<String> segmentNames = new ArrayList<>();
         List<List<Double>> polylinePoints = new ArrayList<>();
+        List<Long> nodeIds = new ArrayList<>();
+
+        Long currNode = origin.getId();
+        nodeIds.add(currNode);
 
         for (RoadSegment s : path) {
             segmentIds.add(s.getId());
             segmentNames.add(s.getName());
+
+            Long nextNode = s.getFromNode().getId().equals(currNode) ? s.getToNode().getId() : s.getFromNode().getId();
+            nodeIds.add(nextNode);
+            currNode = nextNode;
 
             double length = s.getLengthKm() != null ? s.getLengthKm() : 10.0;
             double speed = s.getBaseSpeedKmph() != null ? s.getBaseSpeedKmph() : 40.0;
@@ -222,6 +270,25 @@ public class RoutePlannerService {
             reason = String.format("Alternative corridor bypassing high risk segments (+%d min extra delay).", expectedDelayMin);
         }
 
+        List<String> highlights = new ArrayList<>();
+        if (optionIndex == 1) {
+            highlights.add("Fastest transit time");
+        } else if ("Safest".equals(label)) {
+            highlights.add(String.format("Lowest risk score (%.1f)", weightedAvgRisk));
+        } else {
+            highlights.add("Alternative regional bypass");
+        }
+        if (hasHighRisk) {
+            highlights.add("Caution: high-risk segments present");
+        } else {
+            highlights.add("Clear of severe hazard alerts");
+        }
+        if (expectedDelayMin == 0) {
+            highlights.add("Zero predicted delays");
+        } else {
+            highlights.add(String.format("+%d min weather & hazard buffer", expectedDelayMin));
+        }
+
         String geometryJson;
         try {
             geometryJson = objectMapper.writeValueAsString(polylinePoints);
@@ -241,7 +308,10 @@ public class RoutePlannerService {
                 geometryJson,
                 segmentIds,
                 segmentNames,
-                emergencyMode
+                emergencyMode,
+                nodeIds,
+                label,
+                highlights
         );
     }
 
