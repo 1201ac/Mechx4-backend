@@ -92,8 +92,23 @@ public class SeedService implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) throws Exception {
-        if (userRepository.count() > 0) {
-            return; // Idempotent: run only if empty
+        String encodedPass = passwordEncoder.encode("Demo@1234");
+
+        // Guarantee Mechx4 demo accounts are available
+        ensureUserExists("admin@mechx4.com", encodedPass, "Central Admin", Role.ADMIN);
+        ensureUserExists("moderator@mechx4.com", encodedPass, "Disaster Ops Moderator", Role.MODERATOR);
+        ensureUserExists("user@mechx4.com", encodedPass, "Field Driver User", Role.USER);
+        for (int i = 1; i <= 5; i++) {
+            ensureUserExists("driver" + i + "@mechx4.com", encodedPass, "Driver " + i, Role.USER);
+        }
+
+        // Guarantee legacy accounts for backwards compatibility
+        ensureUserExists("admin@nerlogix.com", encodedPass, "Central Admin", Role.ADMIN);
+        ensureUserExists("moderator@nerlogix.com", encodedPass, "Disaster Ops Moderator", Role.MODERATOR);
+        ensureUserExists("user@nerlogix.com", encodedPass, "Field Driver User", Role.USER);
+
+        if (districtRepository.count() > 0) {
+            return; // Idempotent: network data already initialized
         }
 
         Random rand = new Random(42);
@@ -101,15 +116,18 @@ public class SeedService implements CommandLineRunner {
         // 1. Seed Rule Config & Settings
         seedRulesAndSettings();
 
-        // 2. Seed Users
-        String encodedPass = passwordEncoder.encode("Demo@1234");
-        User admin = userRepository.save(new User("admin@nerlogix.com", encodedPass, "Central Admin", Role.ADMIN));
-        User moderator = userRepository.save(new User("moderator@nerlogix.com", encodedPass, "Disaster Ops Moderator", Role.MODERATOR));
-        User mainUser = userRepository.save(new User("user@nerlogix.com", encodedPass, "Field Driver User", Role.USER));
+        User admin = userRepository.findByEmail("admin@mechx4.com").orElseGet(() ->
+                userRepository.findByEmail("admin@nerlogix.com").orElse(null));
+        User moderator = userRepository.findByEmail("moderator@mechx4.com").orElseGet(() ->
+                userRepository.findByEmail("moderator@nerlogix.com").orElse(null));
+        User mainUser = userRepository.findByEmail("user@mechx4.com").orElseGet(() ->
+                userRepository.findByEmail("user@nerlogix.com").orElse(null));
 
         List<User> extraUsers = new ArrayList<>();
         for (int i = 1; i <= 5; i++) {
-            extraUsers.add(userRepository.save(new User("driver" + i + "@nerlogix.com", encodedPass, "Driver " + i, Role.USER)));
+            final int idx = i;
+            extraUsers.add(userRepository.findByEmail("driver" + idx + "@mechx4.com").orElseGet(() ->
+                    userRepository.findByEmail("driver" + idx + "@nerlogix.com").orElse(mainUser)));
         }
 
         // 3. Seed Districts (≥ 32 across 8 states)
@@ -386,6 +404,12 @@ public class SeedService implements CommandLineRunner {
 
             notificationRepository.save(new Notification(mainUser, alert, titleJson, msgJson));
             notificationRepository.save(new Notification(moderator, alert, titleJson, msgJson));
+        }
+    }
+
+    private void ensureUserExists(String email, String passwordHash, String name, Role role) {
+        if (userRepository.findByEmail(email).isEmpty()) {
+            userRepository.save(new User(email, passwordHash, name, role));
         }
     }
 

@@ -5,3 +5,12 @@ build/
 !.env.example
 *.log
 data/
+uploads/
+.idea/
+.vscode/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*

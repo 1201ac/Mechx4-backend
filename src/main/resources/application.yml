@@ -1,12 +1,12 @@
 spring:
   application:
-    name: nerlogix
+    name: ${SPRING_APPLICATION_NAME:mechx4}
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:prod}
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/nerlogix;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
-    username: ${SPRING_DATASOURCE_USERNAME:sa}
-    password: ${SPRING_DATASOURCE_PASSWORD:}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000/mechx4?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3}
+    username: ${SPRING_DATASOURCE_USERNAME:3KQW41Z7XRUm1xM.root}
+    password: ${DB_PASSWORD:${SPRING_DATASOURCE_PASSWORD:}}
     hikari:
       maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:10}
       minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:2}
@@ -47,13 +47,13 @@ springdoc:
 
 nerlogix:
   jwt:
-    secret: ${NERLOGIX_JWT_SECRET:dev_secret_key_must_be_at_least_32_bytes_long_for_security_reasons_12345}
+    secret: ${MECHX4_JWT_SECRET:${NERLOGIX_JWT_SECRET:dev_secret_key_must_be_at_least_32_bytes_long_for_security_reasons_12345}}
     access-token-expiration-ms: 900000 # 15 minutes
     refresh-token-expiration-ms: 604800000 # 7 days
   cors:
-    allowed-origins: ${NERLOGIX_CORS_ALLOWED_ORIGINS:https://ner-logix-frontend.vercel.app,https://*.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:3000,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:4173,http://127.0.0.1:3000,http://127.0.0.1:8080}
+    allowed-origins: ${MECHX4_CORS_ALLOWED_ORIGINS:${NERLOGIX_CORS_ALLOWED_ORIGINS:https://mechx4-frontend.vercel.app,https://ner-logix-frontend.vercel.app,https://*.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:3000,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:4173,http://127.0.0.1:3000,http://127.0.0.1:8080}}
   weather:
-    auto-fetch: ${NERLOGIX_WEATHER_AUTO_FETCH:true}
+    auto-fetch: ${MECHX4_WEATHER_AUTO_FETCH:${NERLOGIX_WEATHER_AUTO_FETCH:true}}
   simulation:
-    enabled: ${NERLOGIX_SIMULATION_ENABLED:false}
-    tick-ms: ${NERLOGIX_SIMULATION_TICK_MS:5000}
+    enabled: ${MECHX4_SIMULATION_ENABLED:${NERLOGIX_SIMULATION_ENABLED:false}}
+    tick-ms: ${MECHX4_SIMULATION_TICK_MS:${NERLOGIX_SIMULATION_TICK_MS:5000}}
